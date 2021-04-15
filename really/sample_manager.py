@@ -1,12 +1,12 @@
 import os, logging
 from datetime import datetime
 import glob
+import copy
 
 # only print error messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import ray
 import tensorflow as tf
-import gridworlds
 import gym
 import numpy as np
 from really.agent import Agent
@@ -15,13 +15,12 @@ from really.buffer import Replay_buffer
 from really.agg import Smoothing_aggregator
 from really.utils import all_subdirs_of
 
-
 class SampleManager:
 
     """
     @args:
         model: model Object
-        environment: string specifying gym environment or object of custom gym-like (implementing the same methods) environment
+        environment: string specifying gym environment or object of custom gym-like (implementing the same methods) environment or gym environment instance
         num_parallel: int, number of how many agents to run in parall
         total_steps: int, how many steps to collect for the experience replay
         returns: list of strings specifying what is to be returned by the box
@@ -57,9 +56,18 @@ class SampleManager:
         self.kwargs = kwargs
         self.buffer = None
 
-        # create gym / custom gym like environment
+        self.return_feature_state = False
+
+        # create or copy gym / custom gym like environment
         if isinstance(self.environment, str):
-            self.env_instance = gym.make(self.environment)
+            if "special_env" in kwargs:
+                if kwargs["special_env"]:
+                    exec(self.environment, globals())
+                    self.env_instance = special_env
+                else:
+                    kwargs["special_env"] = False
+            else:
+                self.env_instance = gym.make(self.environment)
         else:
             env_kwargs = {}
             if "env_kwargs" in kwargs.keys():
@@ -92,7 +100,7 @@ class SampleManager:
         # check action sampling type
         if "action_sampling_type" in kwargs.keys():
             type = kwargs["action_sampling_type"]
-            if type not in ["thompson", "epsilon_greedy", "discrete_policy", "continuous_normal_diagonal"]:
+            if type not in ["thompson", "epsilon_greedy", "discrete_policy", "continuous_normal_diagonal", "custom"]:
                 print(
                     f"unsupported sampling type: {type}. assuming thompson sampling instead."
                 )
@@ -108,11 +116,14 @@ class SampleManager:
             self.kwargs["epsilon"] = 0.95
         # check return specifications
         for r in returns:
-            if r not in ["log_prob", "monte_carlo", "value_estimate"]:
-                print(f"unsuppoerted return key: {r}")
+            if r not in ["log_prob", "monte_carlo", "value_estimate", "feature_state"]:
+                print(f"unsupported return key: {r}")
                 returns.pop(r)
             if r == "value_estimate":
-                    self.kwargs["value_estimate"] = True
+                self.kwargs["value_estimate"] = True
+            if r == "feature_state":
+                self.return_feature_state = True
+
         self.returns = returns
 
         # check for runner sampling method:
@@ -185,6 +196,11 @@ class SampleManager:
             self.total_steps = total_steps
 
         not_done = True
+
+        if self.kwargs["special_env"]:
+            actual_env_instance = self.env_instance
+            self.env_instance = self.environment
+
         # create list of runner boxes
         runner_boxes = [
             RunnerBox.remote(
@@ -222,7 +238,8 @@ class SampleManager:
                 result, index = r
                 results.append(result)
                 indexes.append(index)
-                print(f'Avg steps of runner {index}: {len(result["state"])/self.runner_steps}')
+                if do_print:
+                    print(f'Avg steps of runner {index}: {len(result["state"])/self.runner_steps}')
 
             # store data from dones
             if do_print:
@@ -240,6 +257,9 @@ class SampleManager:
 
         if total_steps is not None:
             self.total_steps = old_steps
+
+        if self.kwargs["special_env"]:
+            self.env_instance = actual_env_instance
 
         return self.data
 
@@ -259,28 +279,29 @@ class SampleManager:
         # stop if enought data is aggregated
         if len(self.data["state"]) >= self.total_steps:
             not_done = False
-
+        
         return not_done
 
-    def sample(self, sample_size, from_buffer=True):
+    def sample(self, sample_size, do_print=False, from_buffer=True):
         '''
         Returns dictionary containing:
             state: The current state
             action: The current action
             reward: The reward for following action in state
-            new_state: The state the agent is in wfter following action in state
+            new_state: The state the agent is in after following action in state
             not_done: Flag indicating terminal state
 
         optional keys:
             value_estimate: The estimated state value
             log_prob: The log probability for taking action in state
             monte_carlo: The weighted monte carlo returns
+            feature_state: Contains the featurized state
         '''
         # sample from buffer
         if from_buffer:
             dict = self.buffer.sample(sample_size)
         else:
-            dict = self.get_data(total_steps=sample_size)
+            dict = self.get_data(total_steps=sample_size, do_print = do_print)
 
         return dict
 
@@ -288,6 +309,10 @@ class SampleManager:
 
         if test:
             self.kwargs["test"] = True
+
+        if self.kwargs["special_env"]:
+            actual_env_instance = self.env_instance
+            self.env_instance = self.environment
 
         # get agent specifications from runner box
         runner_box = RunnerBox.remote(
@@ -303,6 +328,9 @@ class SampleManager:
 
         if test:
             self.kwargs["test"] = False
+
+        if self.kwargs["special_env"]:
+            self.env_instance = actual_env_instance
 
         return agent
 

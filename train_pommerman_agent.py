@@ -1,101 +1,49 @@
-import gym
 import numpy as np
 import ray
 import os
 from really import SampleManager
-from really.utils import (
-    dict_to_dict_of_datasets,
-)
-from really.utils import discount_cumsum
+from really.utils import dict_to_dict_of_datasets, discount_cumsum
+
+import pommerman
+from pommerman import agents
+from pommerman.envs.wrapped_env import WrappedEnv
 
 import tensorflow as tf
-from tensorflow.keras import Model
-
-class A2C(Model):
-    def __init__(self, layers, action_dim):
-        super(A2C, self).__init__()
-        self.mu_layer = [
-            tf.keras.layers.Dense(
-                units=num_units,
-                activation='relu',
-                name=f'Policy_mu_{i}'
-                ) for i, num_units in enumerate(layers)]
-
-        self.readout_mu = tf.keras.layers.Dense(units=action_dim,
-                                                activation=None,
-                                                name='Policy_mu_readout'
-                                                )
-
-        self.sigma_layer = [
-            tf.keras.layers.Dense(
-                units=num_units,
-                activation='relu',
-                name=f'Policy_sigma_{i}'
-                ) for i, num_units in enumerate(layers)]
-                
-        self.readout_sigma = tf.keras.layers.Dense(units=action_dim,
-                                                   activation=None,
-                                                   name='Policy_sigma_readout'
-                                                   )
-
-        self.value_layer = [
-            tf.keras.layers.Dense(
-                units=num_units,
-                activation='relu',
-                name=f'Value_layer_{i}'
-                ) for i, num_units in enumerate(layers)]
-                
-        self.readout_value = tf.keras.layers.Dense(units=1,
-                                                   activation=None,
-                                                   name='Value_readout'
-                                                   )
-
-    @tf.function
-    def call(self, input_state):
-        output = {}
-        mu_pred = input_state
-        sigma_pred = input_state
-        value_pred = input_state
-        for layer in self.mu_layer:
-            mu_pred = layer(mu_pred)
-        for layer in self.sigma_layer:
-            sigma_pred = layer(sigma_pred)
-        for layer in self.value_layer:
-            value_pred = layer(value_pred)
-
-        # Actor
-        output["mu"] = tf.squeeze(self.readout_mu(mu_pred))
-        output["sigma"] = tf.squeeze(tf.abs(self.readout_sigma(sigma_pred)))
-        # Critic
-        output["value_estimate"] = tf.squeeze(self.readout_value(value_pred))
-        return output
-
 
 if __name__ == "__main__":
-    
-    env = gym.make("LunarLanderContinuous-v2")
 
-    model_kwargs = {"layers": [32,32,32], "action_dim": env.action_space.shape[0]}
+    env_string = '''
+from pommerman import agents
+from pommerman.envs.wrapped_env import WrappedEnv
+special_env = WrappedEnv([agents.ActorCriticAgent(),agents.SimpleAgent(),agents.RandomAgent(),agents.SimpleAgent()],0,'PommeFFACompetition-v0')
+'''
+
+    exec(env_string)
     
-    learning_rate = 0.001
-    max_episodes = 300
-    sampled_batches = 512
+    train_agent = agents.ActorCriticAgent()
+    
+    input_shape = train_agent.get_input_shape(special_env)
+
+    learning_rate = 0.0001
+    episodes = 100
+    sampled_batches = 256
     optimization_batch_size= 64
     gamma = 0.99
     my_lambda = 0.95
     clipping_value = 0.3    
-    critic_discount = 0.5
-    entropy_beta = 0.001
+    critic_discount = 0.8
+    entropy_beta = 0.0001
 
     kwargs = {
-        "model": A2C,
-        "environment": "LunarLanderContinuous-v2",
-        "num_parallel": 3,
+        "model": agents.ActorCriticAgent,
+        "environment": env_string,
+        "num_parallel": 2,
         "total_steps": 420,
-        "returns": ['value_estimate', 'log_prob', 'monte_carlo'],
-        "model_kwargs": model_kwargs,
-        "action_sampling_type": "continuous_normal_diagonal",
-        "gamma": gamma
+        "returns": ['value_estimate', 'log_prob', 'monte_carlo', 'feature_state'],
+        "input_shape": input_shape,
+        "action_sampling_type": "custom",
+        "gamma": gamma,
+        "special_env": True
     }
 
     # Initialize the loss function
@@ -109,7 +57,7 @@ if __name__ == "__main__":
     manager = SampleManager(**kwargs)
 
     # Where to save your results to: create this directory in advance!
-    saving_path = os.getcwd() + "/progress_LunarLanderContinuous"
+    saving_path = os.getcwd() + "/progress_test"#"/progress_Pommerman"
 
     # Initialize progress aggregator
     manager.initialize_aggregator(
@@ -118,11 +66,19 @@ if __name__ == "__main__":
 
     rewards = []
 
+    manager.test(
+        max_steps=1000,
+        test_episodes=1,
+        render=True,
+        do_print=True,
+        evaluation_measure="time_and_reward",
+    )
+
     # Get initial agent
     agent = manager.get_agent()
 
     print('TRAINING')
-    for e in range(max_episodes):
+    for e in range(episodes):
         
         # Sample data to optimize
         print('sampling...')
@@ -135,7 +91,7 @@ if __name__ == "__main__":
         print('calculate advantage estimates...')
 
         # Add value of last 'new_state'
-        sample_dict['value_estimate'].append(agent.v_estimate(np.expand_dims(sample_dict['state_new'][-1],0)))
+        sample_dict['value_estimate'].append(tf.convert_to_tensor(0))
 
         sample_dict['advantage'] = []
         gae = 0
@@ -150,6 +106,7 @@ if __name__ == "__main__":
 
         # Remove keys that are no longer used
         sample_dict.pop('value_estimate')
+        sample_dict.pop('state')
         sample_dict.pop('state_new')
         sample_dict.pop('reward')
         sample_dict.pop('not_done')
@@ -162,7 +119,7 @@ if __name__ == "__main__":
         critic_losses = []
         losses = []
 
-        for state_batch, action_batch, advantage_batch, returns_batch, log_prob_batch in zip(samples['state'], samples['action'], samples['advantage'], samples['monte_carlo'], samples['log_prob']):
+        for state_batch, action_batch, advantage_batch, returns_batch, log_prob_batch in zip(samples['feature_state'], samples['action'], samples['advantage'], samples['monte_carlo'], samples['log_prob']):
             with tf.GradientTape() as tape:                
                 #print('ACTION:\n',action_batch)
                 # Old policy
@@ -174,11 +131,11 @@ if __name__ == "__main__":
                 ratio = tf.exp(new_log_prob - old_log_prob)
                 #print('RATIO:\n',ratio)
                 #print('ADV:\n',advantage_batch)
-                ppo1 = ratio * tf.expand_dims(advantage_batch,1)
+                ppo1 = ratio * advantage_batch
                 #print('PPO1:\n',ppo1)
-                ppo2 = tf.clip_by_value(ratio, 1-clipping_value, 1+clipping_value) * tf.expand_dims(advantage_batch,1)
+                ppo2 = tf.clip_by_value(ratio, 1-clipping_value, 1+clipping_value) * advantage_batch
                 #print('PPO2:\n',ppo2)
-                actor_loss = -tf.reduce_mean(tf.minimum(ppo1,ppo2),0)
+                actor_loss = -(tf.minimum(ppo1,ppo2))
                 #print('ACTOR_LOSS:\n',actor_loss)
 
                 value_target = returns_batch
@@ -189,15 +146,13 @@ if __name__ == "__main__":
                 #print('CRITIC_LOSS:\n',critic_loss)
 
                 #print('ENTROPY:\n',entropy)
-                total_loss = actor_loss + critic_discount * critic_loss - entropy_beta * entropy
+                total_loss = tf.reduce_mean(actor_loss + critic_discount * critic_loss - entropy_beta * entropy)
                 #print('TOTAL_LOSS:\n',total_loss)
 
-                # policy_weights = [var for var in manager.get_agent().model.trainable_variables if 'Policy' in var.name]
-                # value_weights = [var for var in manager.get_agent().model.trainable_variables if 'Value' in var.name]
-                    
-                gradients = tape.gradient(total_loss, agent.model.trainable_variables)
+                gradients = tape.gradient(total_loss, agent.model.model.trainable_variables)
 
-            optimizer.apply_gradients(zip(gradients, agent.model.trainable_variables))
+            optimizer.apply_gradients(zip(gradients, agent.model.model.trainable_variables))
+
             
             actor_losses.append(actor_loss)                
             critic_losses.append(critic_loss)                
@@ -211,17 +166,18 @@ if __name__ == "__main__":
         # Update aggregator
         steps, current_rewards = manager.test(
             max_steps=1000,
-            test_episodes=10,
+            test_episodes=1,
             render=False,
             evaluation_measure="time_and_reward",
             )
 
-        #if (e+1) % 5 == 0:
-        manager.test(
-            max_steps=1000,
-            test_episodes=1,
-            render=True
-            )
+        # if (e+1) % 1 == 0:
+        #     manager.test(
+        #         max_steps=1000,
+        #         test_episodes=1,
+        #         render=True
+        #         )
+        
         manager.update_aggregator(loss=losses, reward=current_rewards, time=steps)
         
         # Collect all rewards
@@ -234,11 +190,13 @@ if __name__ == "__main__":
             f"epoch ::: {e}  loss ::: {np.mean(losses)}   avg_current_reward ::: {np.mean(current_rewards)}   avg_reward ::: {avg_reward}   avg_timesteps ::: {np.mean(steps)}"
         )
 
-        if avg_reward > env.spec.reward_threshold:
+        if avg_reward > 0.6:
             print(f'\n\nEnvironment solved after {e+1} episodes!')
-            # Save model
-            manager.save_model(saving_path, e, model_name='LunarLanderContinuous')
             break
+
+
+    # Save model
+    manager.save_model(saving_path, e, model_name='Pommerman_Agent')
 
     print("testing optimized agent")
     manager.test(
@@ -246,5 +204,5 @@ if __name__ == "__main__":
         test_episodes=10,
         render=True,
         do_print=True,
-        evaluation_measure="time_and_reward",
+        evaluation_measure="reward",
     )

@@ -15,7 +15,6 @@ Have fun!!!!
 
 """
 
-
 class TabularQ(object):
     def __init__(self, h, w, action_space):
         # Initialize Q table

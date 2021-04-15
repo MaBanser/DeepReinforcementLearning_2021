@@ -69,7 +69,7 @@ if __name__ == "__main__":
     manager = SampleManager(**kwargs)
 
     # Where to save your results to: create this directory in advance!
-    saving_path = os.getcwd() + "/progress_test"#"/progress_LunarLander"
+    saving_path = os.getcwd() + "/progress_LunarLander"
 
     # Initialize buffer
     manager.initilize_buffer(buffer_size)

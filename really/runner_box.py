@@ -1,7 +1,7 @@
 import os
 
 # only print error messages
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+#os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import numpy as np
 import gridworlds
@@ -36,15 +36,22 @@ class RunnerBox:
 
     def __init__(
         self, agent, model, environment, runner_position, returns=[], **kwargs
-        ):
+        ):        
+        
+        if isinstance(environment, str) and kwargs['special_env']:
+            exec(environment, globals())
+            self.env = special_env
+        else:
+            self.env = environment
+        kwargs.pop('special_env')
 
-        self.env = environment
         self.runner_position = runner_position
         self.returns = returns
 
         self.return_log_prob = False
         self.return_value_estimate = False
         self.return_monte_carlo = False
+        self.return_feature_state = False
 
         self.discrete_env = kwargs['discrete_env']
         kwargs.pop('discrete_env')
@@ -63,6 +70,8 @@ class RunnerBox:
                     kwargs.pop("gamma")
                 else:
                     self.gamma = 0.99
+            if key == "feature_state":
+                self.return_feature_state = True
 
         self.agent = agent(model, **kwargs)
         self.agent_kwargs = kwargs
@@ -72,7 +81,7 @@ class RunnerBox:
         # Initilize empty datasets aggregator
         self.data_agg = {}
         self.data_agg["action"] = []
-        self.data_agg["state"] = []
+        self.data_agg["state"] = []        
         self.data_agg["reward"] = []
         self.data_agg["state_new"] = []
         self.data_agg["not_done"] = []
@@ -99,7 +108,9 @@ class RunnerBox:
                     np.expand_dims(state, axis=0), self.return_log_prob
                 )
                 # S
-                self.data_agg["state"].append(state)
+                self.data_agg["state"].append(state)                
+                if self.return_feature_state:
+                    self.data_agg["feature_state"].append(self.agent.get_state())
                 # A
                 action = agent_out["action"]
                 if tf.is_tensor(action):
@@ -155,7 +166,9 @@ class RunnerBox:
                 )
     
                 # S
-                self.data_agg["state"].append(state)
+                self.data_agg["state"].append(state)                
+                if self.return_feature_state:
+                    self.data_agg["feature_state"].append(self.agent.get_state())
                 # A
                 action = agent_out["action"]
                 if tf.is_tensor(action):
