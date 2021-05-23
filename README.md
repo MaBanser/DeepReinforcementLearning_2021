@@ -46,7 +46,9 @@ We want you to solve a continuous environment, for example the [continuous Lunar
 Within DeepReinforcementLearning_2021\pommerman, run 
 pip install -U .
 
-
+## Run a game
+Within DeepReinforcementLearning_2021\pommerman, run 
+pom_battle --agents=test::agents.MyAgent,simple::null,simple::null,simple::null --config=PommeFFACompetition-v0 --render --num_times=5
 
 # Citation
 Since we are using Pommerman environment in our research, we cite it using this [bibtex file](../master/pommerman/docs/pommerman.bib) in docs.

@@ -16,6 +16,114 @@ from . import constants
 from . import envs
 from . import characters
 
+# Custom Training environments
+# Empty 5x5 grid
+def ffa_train_v4_1_env():
+    """Start up a FFA config with the default settings."""
+    env = envs.v4.Pomme
+    game_type = constants.GameType.FFA
+    env_entry_point = 'pommerman.envs.v4:Pomme'
+    env_id = 'PommeFFATrain1-v4'
+    env_kwargs = {
+        'game_type': game_type,
+        'board_size': constants.BOARD_SIZE,
+        'free_board_size': 5,
+        'num_rigid': 0,
+        'num_wood': 0,
+        'num_items': 0,
+        'max_steps': constants.MAX_STEPS,
+        'render_fps': constants.RENDER_FPS,
+        'env': env_entry_point,
+        'random_pos': True
+    }
+    agent = characters.Bomber
+    return locals()
+
+# Empty 7x7 grid
+def ffa_train_v4_2_env():
+    """Start up a FFA config with the default settings."""
+    env = envs.v4.Pomme
+    game_type = constants.GameType.FFA
+    env_entry_point = 'pommerman.envs.v4:Pomme'
+    env_id = 'PommeFFATrain2-v4'
+    env_kwargs = {
+        'game_type': game_type,
+        'board_size': constants.BOARD_SIZE,
+        'free_board_size': 7,
+        'num_rigid': 0,
+        'num_wood': 0,
+        'num_items': 0,
+        'max_steps': constants.MAX_STEPS,
+        'render_fps': constants.RENDER_FPS,
+        'env': env_entry_point,
+        'random_pos': True
+    }
+    agent = characters.Bomber
+    return locals()
+
+# 7x7 grid with a few wood blocks
+def ffa_train_v4_3_env():
+    """Start up a FFA config with the default settings."""
+    env = envs.v4.Pomme
+    game_type = constants.GameType.FFA
+    env_entry_point = 'pommerman.envs.v4:Pomme'
+    env_id = 'PommeFFATrain3-v4'
+    env_kwargs = {
+        'game_type': game_type,
+        'board_size': constants.BOARD_SIZE,
+        'free_board_size': 7,
+        'num_rigid': 0,
+        'num_wood': 8,
+        'num_items': 8,
+        'max_steps': constants.MAX_STEPS,
+        'render_fps': constants.RENDER_FPS,
+        'env': env_entry_point,
+        'random_pos': True
+    }
+    agent = characters.Bomber
+    return locals()
+
+# 9x9 grid with a few wood blocks
+def ffa_train_v4_4_env():
+    """Start up a FFA config with the default settings."""
+    env = envs.v4.Pomme
+    game_type = constants.GameType.FFA
+    env_entry_point = 'pommerman.envs.v4:Pomme'
+    env_id = 'PommeFFATrain4-v4'
+    env_kwargs = {
+        'game_type': game_type,
+        'board_size': constants.BOARD_SIZE,
+        'free_board_size': 9,
+        'num_rigid': 0,
+        'num_wood': 24,
+        'num_items': 18,
+        'max_steps': constants.MAX_STEPS,
+        'render_fps': constants.RENDER_FPS,
+        'env': env_entry_point,
+        'random_pos': True
+    }
+    agent = characters.Bomber
+    return locals()
+
+# 11x11 grid with woodblocks and a few rigid blocks
+def ffa_train_v0_5_env():
+    """Start up a FFA config with the default settings."""
+    env = envs.v0.Pomme
+    game_type = constants.GameType.FFA
+    env_entry_point = 'pommerman.envs.v0:Pomme'
+    env_id = 'PommeFFATrain5-v0'
+    env_kwargs = {
+        'game_type': game_type,
+        'board_size': constants.BOARD_SIZE,
+        'num_rigid': 10,
+        'num_wood': 14,
+        'num_items': 8,
+        'max_steps': constants.MAX_STEPS,
+        'render_fps': constants.RENDER_FPS,
+        'env': env_entry_point,
+    }
+    agent = characters.Bomber
+    return locals()
 
 def one_vs_one_env():
     """Start up an OneVsOne config with the default settings."""

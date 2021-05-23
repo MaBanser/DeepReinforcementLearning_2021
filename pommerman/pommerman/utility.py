@@ -152,6 +152,120 @@ def make_board(size, num_rigid=0, num_wood=0, num_agents=4):
 
     return board
 
+# Custom function to create boards with a smaller area for the agents to move
+def make_board_small(size=11, freesize=4, num_rigid=0, num_wood=0, num_agents=2, random_pos=False):
+    """Make a standard 11x11 board, filled in with rigid walls to define a smaller central free space for ease of training 
+    The numbers refer to the Item enum in constants. This is:
+     0 - passage
+     1 - rigid wall
+     2 - wood wall
+     3 - bomb
+     4 - flames
+     5 - fog
+     6 - extra bomb item
+     7 - extra firepower item
+     8 - kick
+     9 - skull
+     10 - 13: agents
+    Args:
+      size: The dimension of the board, i.e. it's sizeXsize.
+      freesize: The dimensions of the central region open for players
+      num_rigid: The number of rigid walls on the board. This should be even.
+      num_wood: Similar to above but for wood walls.
+    Returns:
+      board: The resulting random board.
+    """
+
+    def lay_wall(value, num_left, coordinates, board):
+        '''Lays all of the walls on a board'''
+        x, y = random.sample(coordinates, 1)[0]
+        coordinates.remove((x, y))
+        board[x, y] = value
+        num_left -= 1
+        return num_left
+
+    def make(size, freesize, num_rigid, num_wood, num_agents):
+        '''Constructs a game/board'''
+        # Check size inputs correct
+        assert freesize <= size
+        assert freesize > 3
+
+        # Initialize everything as a passage.
+        board = np.ones((size,
+                         size)).astype(np.uint8) * constants.Item.Passage.value
+
+        # Gather all the possible coordinates to use for walls.
+        coordinates = set([
+            (x, y) for x, y in \
+            itertools.product(range(size), range(size))])
+
+        # Get 4 agent positions coordinates
+        pos1 = (int(np.ceil((size-freesize)/2)+1), int(np.ceil((size-freesize)/2)+1))
+        pos2 = (int(np.ceil((size-freesize)/2)+1), size-int(np.ceil((size-freesize)/2)+1+freesize%2))
+        pos3 = (size-int(np.ceil((size-freesize)/2)+1+freesize%2), size-int(np.ceil((size-freesize)/2)+1+freesize%2))
+        pos4 = (size-int(np.ceil((size-freesize)/2)+1+freesize%2), int(np.ceil((size-freesize)/2)+1))
+
+        free_leftbound = pos1[1] - 1
+        free_rightbound = pos3[1] + 1
+        free_topbound = pos1[0] - 1
+        free_bottombound = pos3[0] + 1
+
+        # Wall up the arena surrounding the free space
+        for y in range(size):
+            for x in range(size):
+                if x < free_leftbound or x > free_rightbound:
+                    board[y,x] = constants.Item.Rigid.value
+                    coordinates.remove((y,x))
+                elif y < free_topbound or y > free_bottombound:
+                    board[y,x] = constants.Item.Rigid.value
+                    coordinates.remove((y,x))
+
+
+        if not random_pos:
+            pos_list = [pos1,pos2,pos3,pos4]
+            random.shuffle(pos_list)
+
+            # Place agents in their positions
+            if num_agents == 2:
+                board[pos_list[0]] = constants.Item.Agent0.value
+                board[pos_list[2]] = constants.Item.Agent1.value
+                agents = [pos_list[0],pos_list[2]]
+            elif num_agents == 4:
+                board[pos_list[0]] = constants.Item.Agent0.value
+                board[pos_list[1]] = constants.Item.Agent1.value
+                board[pos_list[2]] = constants.Item.Agent2.value
+                board[pos_list[3]] = constants.Item.Agent3.value
+                agents = [pos_list[0],pos_list[1],pos_list[2],pos_list[3]]
+        else:
+            # Place agents randomly
+            agents = random.sample(coordinates, num_agents)
+            if num_agents == 2:
+                board[agents[0]] = constants.Item.Agent0.value
+                board[agents[1]] = constants.Item.Agent1.value
+            elif num_agents == 4:
+                board[agents[0]] = constants.Item.Agent0.value
+                board[agents[1]] = constants.Item.Agent1.value
+                board[agents[2]] = constants.Item.Agent2.value
+                board[agents[3]] = constants.Item.Agent3.value
+
+        for position in agents:
+            coordinates.remove(position)
+
+
+        # Place some wooden walls
+        while num_wood > 0:
+            num_wood = lay_wall(constants.Item.Wood.value, num_wood,
+                                coordinates, board)
+
+        return board, agents
+
+    board, agents = make(size, freesize, num_rigid, num_wood, num_agents)
+
+    # Make sure it's possible to reach most of the passages.
+    while len(inaccessible_passages(board, agents)) > 4:
+        board, agents = make(size, freesize, num_rigid, num_wood, num_agents)
+
+    return board
 
 def make_items(board, num_items):
     '''Lays all of the items on the board'''

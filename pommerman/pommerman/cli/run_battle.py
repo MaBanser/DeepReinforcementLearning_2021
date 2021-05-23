@@ -15,6 +15,7 @@ python run_battle.py --agents=player::arrows,docker::pommerman/test-agent,random
 import atexit
 from datetime import datetime
 import os
+from pommerman import constants
 import random
 import sys
 import time
@@ -36,6 +37,7 @@ def run(args, num_times=1, seed=None):
     game_state_file = args.game_state_file
     render_mode = args.render_mode
     do_sleep = args.do_sleep
+    num_times = args.num_times
 
     agents = [
         helpers.make_agent_from_string(agent_string, agent_id)
@@ -44,7 +46,7 @@ def run(args, num_times=1, seed=None):
 
     env = make(config, agents, game_state_file, render_mode=render_mode)
 
-    def _run(record_pngs_dir=None, record_json_dir=None):
+    def _run(record_pngs_dir=None, record_json_dir=None, game_num=1):
         '''Runs a game'''
         print("Starting the Game.")
         if record_pngs_dir and not os.path.isdir(record_pngs_dir):
@@ -67,7 +69,7 @@ def run(args, num_times=1, seed=None):
             actions = env.act(obs)
             obs, reward, done, info = env.step(actions)
 
-        print("Final Result: ", info)
+        print("Final Result Game : ", game_num, info)
         if args.render:
             env.render(
                 record_pngs_dir=record_pngs_dir,
@@ -86,9 +88,7 @@ def run(args, num_times=1, seed=None):
             _agents = args.agents.split(',')
             utility.join_json_state(record_json_dir, _agents, finished_at,
                                     config, info)
-
         return info
-
     if seed is None:
         # Pick a random seed between 0 and 2^31 - 1
         seed = random.randint(0, np.iinfo(np.int32).max)
@@ -105,12 +105,32 @@ def run(args, num_times=1, seed=None):
                            if record_pngs_dir else None
         record_json_dir_ = record_json_dir + '/%d' % (i+1) \
                            if record_json_dir else None
-        infos.append(_run(record_pngs_dir_, record_json_dir_))
+        infos.append(_run(record_pngs_dir_, record_json_dir_, i))
 
         times.append(time.time() - start)
         print("Game Time: ", times[-1])
 
     atexit.register(env.close)
+
+    winner_dict={
+        'Player 1':0,
+        'Player 2':0,
+        'Player 3':0,
+        'Player 4':0,
+        'Tie':0
+        }
+    for info in infos:
+        result = info['result']
+        if result == constants.Result.Win:
+            for w in info['winners']:
+                winner = f"Player {w+1}"
+                winner_dict[winner] += 1
+        else:
+            winner_dict['Tie'] += 1
+    winner_percent = {player:"{:.2f}%".format(winner_dict[player]/num_times*100) for player in winner_dict}
+
+    print(f'Result after {num_times} games:')
+    print(winner_percent)
     return infos
 
 
@@ -168,6 +188,12 @@ def main():
         '--do_sleep',
         default=True,
         help="Whether we sleep after each rendering.")
+    parser.add_argument(
+        '--num_times',
+        type=int,
+        default=1,
+        help="How many games to run.")
+    
     args = parser.parse_args()
     run(args)
 

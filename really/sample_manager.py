@@ -4,7 +4,7 @@ import glob
 import copy
 
 # only print error messages
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+#os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import ray
 import tensorflow as tf
 import gym
@@ -25,12 +25,14 @@ class SampleManager:
         total_steps: int, how many steps to collect for the experience replay
         returns: list of strings specifying what is to be returned by the box
             supported are: 'value_estimate', 'log_prob', 'monte_carlo'
-        action_sampling_type: string, type of sampling actions, supported are 'epsilon_greedy', 'thompson', 'discrete_policy' or 'continuous_normal_diagonal'
+        action_sampling_type: string, type of sampling actions, supported are 'epsilon_greedy', 'thompson', 'discrete_policy', 'continuous_normal_diagonal' or 'custom'
 
     @kwargs:
         model_kwargs: dict, optional model initialization specifications
         weights: optional, weights which can be loaded into the agent for remote data collecting
         input_shape: shape or boolean (if shape not needed for first call of model), defaults shape of the environments reset state
+
+        special_env: Create a special environment via executable code
 
         env_config: dict, opitonal configurations for environment creation if a custom environment is used
 
@@ -58,14 +60,14 @@ class SampleManager:
 
         self.return_feature_state = False
 
+        if not ("special_env" in kwargs):
+            kwargs["special_env"] = False
+
         # create or copy gym / custom gym like environment
         if isinstance(self.environment, str):
-            if "special_env" in kwargs:
-                if kwargs["special_env"]:
-                    exec(self.environment, globals())
-                    self.env_instance = special_env
-                else:
-                    kwargs["special_env"] = False
+            if kwargs["special_env"]:
+                exec(self.environment, globals())
+                self.env_instance = special_env
             else:
                 self.env_instance = gym.make(self.environment)
         else:
@@ -223,7 +225,8 @@ class SampleManager:
 
         # run as long as not yet reached number of total steps
         while not_done:
-            print('Run: ',t)
+            if do_print:
+                print('Run: ',t)
             ready, runner_box_list = ray.wait(
                 runner_box_list,
                 num_returns=self.remote_min_returns,
@@ -242,8 +245,6 @@ class SampleManager:
                     print(f'Avg steps of runner {index}: {len(result["state"])/self.runner_steps}')
 
             # store data from dones
-            if do_print:
-                print(f"iteration: {t}, storing results of {len(indexes)} runners")
             not_done = self._store(results)
             # get boxes that are already done
             accessed_mapping = map(runner_boxes.__getitem__, indexes)
@@ -254,6 +255,8 @@ class SampleManager:
             else:
                 runner_box_list.extend([b.run_n_steps.remote(self.runner_steps) for b in dones])
             t += 1
+
+        del runner_box_list
 
         if total_steps is not None:
             self.total_steps = old_steps
@@ -295,7 +298,7 @@ class SampleManager:
             value_estimate: The estimated state value
             log_prob: The log probability for taking action in state
             monte_carlo: The weighted monte carlo returns
-            feature_state: Contains the featurized state
+            feature_state: Contains the featurized state (that can be directly passed to a tensorflow model)
         '''
         # sample from buffer
         if from_buffer:
@@ -469,6 +472,7 @@ class SampleManager:
         latest_subdir = max(subdirs, key=os.path.getmtime)
         print("loading model...")
         model = tf.keras.models.load_model(latest_subdir)
+        print(model.summary())
         weights = model.get_weights()
         self.set_agent(weights)
         agent = self.get_agent()
