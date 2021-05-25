@@ -225,7 +225,7 @@ class ActorCriticAgent(BaseAgent):
 
         network_out = self.model(tf.expand_dims(net_in,0))
         probs = network_out["policy"]
-        print(probs)
+        # print(probs)
         # print(network_out["value_estimate"])
         allowed_actions = get_filtered_actions(state,(self.prev_obs[-2],self.prev_obs[-1]))
         allowed_probs = tf.gather(probs,allowed_actions)
