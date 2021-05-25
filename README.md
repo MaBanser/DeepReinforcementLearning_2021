@@ -23,7 +23,8 @@ We advise you to use the framework to solve the homework with the framework to g
 ### Install gridworlds
 
 Within DeepReinforcementLearning_2021\gridworlds, run 
-pip install -U .
+
+`pip install -U .`
 
 ## Homework 2 - Cartpole
 The second challenge will be about solving the infamous [Cartpole-v0](https://gym.openai.com/envs/CartPole-v0/) environment from OpenAI gym with a deep reinforcement learning algorithm. Again we advise you to make use of the framework we provide: 
@@ -44,11 +45,15 @@ We want you to solve a continuous environment, for example the [continuous Lunar
 
 ## Install Pommerman
 Within DeepReinforcementLearning_2021\pommerman, run 
-pip install -U .
+
+`pip install -U .`
 
 ## Run a game
-Within DeepReinforcementLearning_2021\pommerman, run 
-pom_battle --agents=test::agents.MyAgent,simple::null,simple::null,simple::null --config=PommeFFACompetition-v0 --render --num_times=5
+Within DeepReinforcementLearning_2021\pommerman, run
+
+`pom_battle --agents=test::agents.MyAgent,simple::null,simple::null,simple::null --config=PommeFFACompetition-v0 --render --num_times=5`
+
+This will run 5 games between the trained agent and 3 SimpleAgents.
 
 # Citation
 Since we are using Pommerman environment in our research, we cite it using this [bibtex file](../master/pommerman/docs/pommerman.bib) in docs.
